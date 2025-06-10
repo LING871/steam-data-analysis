@@ -78,27 +78,38 @@ try:
     os.makedirs(fonts_dir, exist_ok=True)
     
     # 下载并使用Google Noto Sans SC字体
-    font_url = "https://fonts.gstatic.com/s/notosanssc/v26/k3kXo84MPvpLmixcA63oeALhLOCT-xWNm8Hqd37g1OkDRZe7lR4sg1IzSy-MNbE9VH8V.ttf"
+    font_urls = [
+        "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+        "https://fonts.gstatic.com/s/notosanssc/v26/k3kXo84MPvpLmixcA63oeALhLOCT-xWNm8Hqd37g1OkDRZe7lR4sg1IzSy-MNbE9VH8V.ttf",
+        "https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansSC/NotoSansSC-Regular.ttf"
+    ]
     font_path = os.path.join(fonts_dir, 'NotoSansSC-Regular.ttf')
     
     # 如果字体文件不存在，则下载
     if not os.path.exists(font_path):
-        try:
-            st.sidebar.info("正在下载中文字体文件...")
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.ttf') as temp_file:
-                temp_path = temp_file.name
+        download_success = False
+        for i, font_url in enumerate(font_urls):
+            try:
+                st.sidebar.info(f"正在尝试下载中文字体文件... (尝试 {i+1}/{len(font_urls)})")
+                # 设置请求头，模拟浏览器
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
                 # 下载字体
-                response = requests.get(font_url)
-                if response.status_code == 200:
-                    temp_file.write(response.content)
-                    # 下载完成后移动到目标位置
-                    os.replace(temp_path, font_path)
-                    st.sidebar.success("字体下载成功！")
+                response = requests.get(font_url, headers=headers, timeout=30)
+                if response.status_code == 200 and len(response.content) > 1000:  # 确保下载的文件不为空
+                    with open(font_path, 'wb') as f:
+                        f.write(response.content)
+                    st.sidebar.success(f"字体下载成功！文件大小: {len(response.content)} 字节")
+                    download_success = True
+                    break
                 else:
-                    st.sidebar.error(f"字体下载失败: HTTP {response.status_code}")
-        except Exception as e:
-            st.sidebar.error(f"字体下载出错: {e}")
+                    st.sidebar.warning(f"字体下载失败: HTTP {response.status_code}，尝试下一个源...")
+            except Exception as e:
+                st.sidebar.warning(f"字体下载出错: {e}，尝试下一个源...")
+        
+        if not download_success:
+            st.sidebar.error("所有字体下载源都失败，将使用系统默认字体")
     
     system = platform.system()
     
@@ -491,14 +502,36 @@ def plot_tags_wordcloud(df):
     # 创建词云对象 - 优先使用下载的Noto Sans SC字体
     try:
         # 确定要使用的字体路径
+        font_path_for_wordcloud = None
+        
         if os.path.exists(noto_font_path):
-            # 使用下载的Noto Sans SC字体
-            font_path_for_wordcloud = noto_font_path
-            st.info("词云使用下载的Noto Sans SC字体")
+            # 验证字体文件是否可用
+            try:
+                # 测试字体文件是否可以被WordCloud使用
+                test_wordcloud = WordCloud(font_path=noto_font_path, width=100, height=100)
+                font_path_for_wordcloud = noto_font_path
+                st.success(f"词云使用下载的Noto Sans SC字体: {noto_font_path}")
+            except Exception as font_error:
+                st.error(f"下载的字体文件无法使用: {font_error}")
+                font_path_for_wordcloud = None
         else:
-            # 尝试使用系统字体
-            font_path_for_wordcloud = None
-            st.info("词云使用系统默认字体")
+            st.warning(f"字体文件不存在: {noto_font_path}")
+        
+        # 如果下载的字体不可用，尝试查找系统中文字体
+        if font_path_for_wordcloud is None:
+            import matplotlib.font_manager as fm
+            # 查找系统中的中文字体
+            chinese_fonts = []
+            for font in fm.fontManager.ttflist:
+                font_name = font.name.lower()
+                if any(name in font_name for name in ['microsoft yahei', 'simhei', 'simsun', 'noto', 'source han']):
+                    chinese_fonts.append(font.fname)
+            
+            if chinese_fonts:
+                font_path_for_wordcloud = chinese_fonts[0]
+                st.info(f"词云使用系统字体: {font_path_for_wordcloud}")
+            else:
+                st.warning("未找到可用的中文字体，词云可能无法正确显示中文")
         
         # 创建词云对象
         wordcloud = WordCloud(
@@ -508,7 +541,9 @@ def plot_tags_wordcloud(df):
             max_words=100,
             max_font_size=150,
             random_state=42,
-            font_path=font_path_for_wordcloud
+            font_path=font_path_for_wordcloud,
+            prefer_horizontal=0.9,
+            min_font_size=10
         )
         
         # 生成词云
