@@ -39,10 +39,28 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# 添加CSS注入，使用Google Fonts的Noto Sans SC字体解决中文显示问题
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Noto Sans SC', sans-serif !important;
+    }
+    .stPlotlyChart, .stChart, .matplotlib-figure {
+        font-family: 'Noto Sans SC', sans-serif !important;
+    }
+    .tick text, .axislabel, .legend text, .mpld3-xaxis, .mpld3-yaxis {
+        font-family: 'Noto Sans SC', sans-serif !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 设置中文显示
 # 设置中文显示
 try:
     # 更可靠的中文字体设置方法
     import platform
+    import matplotlib.font_manager as fm
     
     system = platform.system()
     
@@ -56,8 +74,11 @@ try:
         font_path = '/System/Library/Fonts/PingFang.ttc'
     else:  # Linux等其他系统
         # Linux系统字体设置
-        font_family = ['WenQuanYi Micro Hei', 'Droid Sans Fallback', 'sans-serif']
-        font_path = '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf'
+        font_family = ['Noto Sans SC', 'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'sans-serif']
+        font_path = '/usr/share/fonts/truetype/noto/NotoSansSC-Regular.otf'
+    
+    # 创建通用字体属性对象，用于所有图表
+    font_prop = fm.FontProperties(family=font_family)
     
     # 尝试注册字体
     try:
@@ -81,6 +102,27 @@ try:
 except Exception as e:
     st.warning(f"警告：设置中文字体时出错 - {e}")
     st.info("将尝试使用系统默认字体")
+    # 创建一个默认字体属性对象
+    font_prop = fm.FontProperties()
+
+# 强制设置matplotlib使用中文字体
+try:
+    plt.rcParams['font.family'] = ['sans-serif']
+    plt.rcParams['font.sans-serif'] = ['Noto Sans SC', 'Arial Unicode MS', 'SimHei', 'Microsoft YaHei']
+    plt.rcParams['axes.unicode_minus'] = False
+    
+    # 打印当前字体设置，用于调试
+    st.sidebar.markdown("### 调试信息")
+    with st.sidebar.expander("字体设置", expanded=False):
+        st.write(f"当前系统: {system}")
+        st.write(f"字体家族: {plt.rcParams['font.family']}")
+        st.write(f"无衬线字体: {plt.rcParams['font.sans-serif']}")
+        if 'font_prop' in locals():
+            st.write(f"字体属性: {font_prop.get_name()}")
+        if 'current_font' in locals():
+            st.write(f"当前字体路径: {current_font}")
+except Exception as e:
+    st.sidebar.warning(f"设置字体参数时出错: {e}")
 
 # 数据处理函数
 def clean_data(df):
@@ -300,46 +342,37 @@ def plot_rating_price_correlation(df):
     
     if valid_data.empty:
         st.warning("没有同时包含价格和好评率的有效数据可供分析")
-        return None
+        return None, 0
     
     # 绘制散点图
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # 获取字体路径
-    try:
-        font_path = fm.findfont(fm.FontProperties(family='Microsoft YaHei'))
-    except:
-        font_path = None
+    # 使用全局字体属性对象
+    global font_prop
     
     # 使用seaborn的regplot绘制散点图和回归线
     sns.regplot(x='价格', y='好评率', data=valid_data, 
                scatter_kws={'alpha':0.5, 's':50, 'color':'blue'}, 
                line_kws={'color':'red', 'linewidth':2}, ax=ax)
     
-    # 添加标题和标签
-    if font_path:
-        ax.set_title('Steam游戏价格与好评率关系', fontsize=16, fontproperties=fm.FontProperties(fname=font_path))
-        ax.set_xlabel('价格 (人民币)', fontsize=14, fontproperties=fm.FontProperties(fname=font_path))
-        ax.set_ylabel('好评率 (%)', fontsize=14, fontproperties=fm.FontProperties(fname=font_path))
-    else:
-        ax.set_title('Steam游戏价格与好评率关系', fontsize=16)
-        ax.set_xlabel('价格 (人民币)', fontsize=14)
-        ax.set_ylabel('好评率 (%)', fontsize=14)
+    # 添加标题和标签，使用全局字体属性
+    ax.set_title('Steam游戏价格与好评率关系', fontsize=16, fontproperties=font_prop)
+    ax.set_xlabel('价格 (人民币)', fontsize=14, fontproperties=font_prop)
+    ax.set_ylabel('好评率 (%)', fontsize=14, fontproperties=font_prop)
     
     ax.grid(True, linestyle='--', alpha=0.7)
     
     # 计算相关系数
     corr = valid_data['价格'].corr(valid_data['好评率'])
     
-    # 添加相关系数文本
-    if font_path:
-        ax.text(0.05, 0.95, f'相关系数: {corr:.2f}', 
-                transform=ax.transAxes, fontsize=12,
-                verticalalignment='top', fontproperties=fm.FontProperties(fname=font_path))
-    else:
-        ax.text(0.05, 0.95, f'相关系数: {corr:.2f}', 
-                transform=ax.transAxes, fontsize=12,
-                verticalalignment='top')
+    # 添加相关系数文本，使用全局字体属性
+    ax.text(0.05, 0.95, f'相关系数: {corr:.2f}', 
+            transform=ax.transAxes, fontsize=12,
+            verticalalignment='top', fontproperties=font_prop)
+    
+    # 设置刻度标签字体
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontproperties(font_prop)
     
     plt.tight_layout()
     
@@ -365,31 +398,24 @@ def plot_tags_bar(df):
     
     # 绘制柱状图
     fig, ax = plt.subplots(figsize=(10, 8))
-    
-    # 获取字体路径
-    try:
-        font_path = fm.findfont(fm.FontProperties(family='Microsoft YaHei'))
-    except:
-        font_path = None
+·    
+    # 使用全局字体属性对象
+    global font_prop
     
     sns.barplot(x='出现次数', y='标签', data=tags_df, palette='viridis', ax=ax)
     
-    # 添加标题和标签
-    if font_path:
-        ax.set_title('Steam游戏热门标签 Top 20', fontsize=16, fontproperties=fm.FontProperties(fname=font_path))
-        ax.set_xlabel('出现次数', fontsize=14, fontproperties=fm.FontProperties(fname=font_path))
-        ax.set_ylabel('标签', fontsize=14, fontproperties=fm.FontProperties(fname=font_path))
-    else:
-        ax.set_title('Steam游戏热门标签 Top 20', fontsize=16)
-        ax.set_xlabel('出现次数', fontsize=14)
-        ax.set_ylabel('标签', fontsize=14)
+    # 添加标题和标签，使用全局字体属性
+    ax.set_title('Steam游戏热门标签 Top 20', fontsize=16, fontproperties=font_prop)
+    ax.set_xlabel('出现次数', fontsize=14, fontproperties=font_prop)
+    ax.set_ylabel('标签', fontsize=14, fontproperties=font_prop)
     
-    # 在柱状图上添加数值标签
+    # 设置刻度标签字体
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontproperties(font_prop)
+    
+    # 添加数值标签
     for i, v in enumerate(tags_df['出现次数']):
-        if font_path:
-            ax.text(v + 0.5, i, str(v), va='center', fontsize=12, fontproperties=fm.FontProperties(fname=font_path))
-        else:
-            ax.text(v + 0.5, i, str(v), va='center', fontsize=12)
+        ax.text(v + 0.5, i, str(v), fontproperties=font_prop)
     
     plt.tight_layout()
     
@@ -397,7 +423,7 @@ def plot_tags_bar(df):
 
 def plot_tags_wordcloud(df):
     """
-    生成标签词云
+    绘制标签词云
     """
     # 统计所有标签
     all_tags = [tag for tags in df['标签列表'] for tag in tags if tag]
@@ -409,128 +435,114 @@ def plot_tags_wordcloud(df):
     # 统计标签频率
     tag_counter = Counter(all_tags)
     
-    # 尝试查找中文字体
+    # 使用全局字体属性对象
+    global font_prop
+    
+    # 获取字体路径用于词云
     try:
-        font_path = None
-        for font in ['SimHei', 'Microsoft YaHei', 'SimSun', 'Arial Unicode MS']:
-            try:
-                font_path = fm.findfont(fm.FontProperties(family=font))
-                if font_path:
-                    break
-            except:
-                continue
+        font_path = fm.findfont(fm.FontProperties(family=['Noto Sans SC', 'Microsoft YaHei', 'SimHei']))
     except:
+        # 如果找不到中文字体，尝试使用系统默认字体
         font_path = None
     
+    # 创建词云对象
+    if font_path:
+        wordcloud = WordCloud(
+            font_path=font_path,
+            width=800, 
+            height=400, 
+            background_color='white',
+            max_words=100,
+            max_font_size=150,
+            random_state=42
+        )
+    else:
+        # 如果找不到字体，使用默认设置
+        wordcloud = WordCloud(
+            width=800, 
+            height=400, 
+            background_color='white',
+            max_words=100,
+            max_font_size=150,
+            random_state=42
+        )
+    
     # 生成词云
-    try:
-        if font_path:
-            wordcloud = WordCloud(
-                font_path=font_path,
-                width=800, 
-                height=400, 
-                background_color='white',
-                max_words=100,
-                colormap='viridis',
-                contour_width=1,
-                contour_color='steelblue'
-            ).generate_from_frequencies(tag_counter)
-        else:
-            wordcloud = WordCloud(
-                width=800, 
-                height=400, 
-                background_color='white',
-                max_words=100,
-                colormap='viridis',
-                contour_width=1,
-                contour_color='steelblue'
-            ).generate_from_frequencies(tag_counter)
-        
-        # 绘制词云
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.imshow(wordcloud, interpolation='bilinear')
-        ax.axis('off')
-        
-        # 添加标题
-        if font_path:
-            ax.set_title('Steam游戏标签词云', fontsize=16, fontproperties=fm.FontProperties(fname=font_path))
-        else:
-            ax.set_title('Steam游戏标签词云', fontsize=16)
-        
-        plt.tight_layout()
-        
-        return fig
-    except Exception as e:
-        st.error(f"生成词云时出错: {e}")
-        return None
+    wordcloud.generate_from_frequencies(tag_counter)
+    
+    # 绘制词云图
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis('off')
+    
+    # 添加标题
+    ax.set_title('Steam游戏标签词云', fontsize=16, fontproperties=font_prop)
+    
+    plt.tight_layout()
+    
+    return fig
 
 def find_high_value_games(df, mean_price=None):
     """
-    找出高性价比游戏（价格低于平均且好评率高于85%）
+    找出高性价比游戏（高好评率+低价格）
     """
     # 过滤有效数据（价格和好评率都不为空）
-    df_valid = df.dropna(subset=['价格', '好评率'])
+    valid_data = df.dropna(subset=['价格', '好评率'])
+    valid_data = valid_data[valid_data['价格'] > 0]
     
-    if df_valid.empty:
+    if valid_data.empty:
         st.warning("没有同时包含价格和好评率的有效数据可供分析")
         return None, None
     
     # 如果没有提供平均价格，计算平均价格
     if mean_price is None:
-        valid_prices = df_valid['价格'][df_valid['价格'] > 0]
-        if valid_prices.empty:
-            st.warning("没有有效的价格数据可供分析")
-            return None, None
-        mean_price = valid_prices.mean()
+        mean_price = valid_data['价格'].mean()
     
-    # 找出高性价比游戏
-    high_value_games = df_valid[(df_valid['好评率'] > 85) & 
-                               (df_valid['价格'] < mean_price)].copy()
+    # 设置好评率和价格阈值
+    rating_threshold = 85  # 85%好评率
+    price_threshold = mean_price  # 低于平均价格
     
-    if high_value_games.empty:
-        st.warning("没有找到符合条件的高性价比游戏")
-        return None, None
+    # 筛选高性价比游戏
+    high_value_games = valid_data[(valid_data['好评率'] >= rating_threshold) & 
+                                 (valid_data['价格'] <= price_threshold)]
     
     # 按好评率降序排序
-    high_value_games = high_value_games.sort_values('好评率', ascending=False)
+    high_value_games = high_value_games.sort_values(by='好评率', ascending=False)
     
-    # 绘制高性价比游戏的散点图
+    # 使用全局字体属性对象
+    global font_prop
+    
+    # 绘制散点图，突出高性价比游戏
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # 获取字体路径
-    try:
-        font_path = fm.findfont(fm.FontProperties(family='Microsoft YaHei'))
-    except:
-        font_path = None
+    # 绘制所有游戏的散点图（灰色）
+    ax.scatter(valid_data['价格'], valid_data['好评率'], 
+              alpha=0.5, s=50, color='gray', label='所有游戏')
     
-    # 所有游戏的散点图（背景）
-    ax.scatter(df_valid['价格'], df_valid['好评率'], 
-              alpha=0.3, color='gray', label='所有游戏')
-    
-    # 高性价比游戏的散点图（突出显示）
+    # 绘制高性价比游戏的散点图（红色）
     ax.scatter(high_value_games['价格'], high_value_games['好评率'], 
-              alpha=0.8, color='red', s=80, label='高性价比游戏')
+              alpha=0.8, s=50, color='red', label='高性价比游戏')
     
-    # 添加参考线
-    ax.axhline(y=85, color='red', linestyle='--', linewidth=2, alpha=0.7, 
-                label='好评率 85%')
-    ax.axvline(x=mean_price, color='blue', linestyle='--', linewidth=2, alpha=0.7, 
-                label=f'平均价格 {mean_price:.2f} 人民币')
+    # 添加阈值线
+    ax.axhline(y=rating_threshold, color='r', linestyle='--', alpha=0.7, label=f'好评率 {rating_threshold}%')
+    ax.axvline(x=price_threshold, color='b', linestyle='--', alpha=0.7, label=f'平均价格 {price_threshold:.2f} 元')
     
     # 添加标题和标签
-    if font_path:
-        ax.set_title('高性价比游戏推荐（价格低于平均且好评率高于85%）', fontsize=16, fontproperties=fm.FontProperties(fname=font_path))
-        ax.set_xlabel('价格 (人民币)', fontsize=14, fontproperties=fm.FontProperties(fname=font_path))
-        ax.set_ylabel('好评率 (%)', fontsize=14, fontproperties=fm.FontProperties(fname=font_path))
-        ax.legend(fontsize=12, prop=fm.FontProperties(fname=font_path))
-    else:
-        ax.set_title('高性价比游戏推荐（价格低于平均且好评率高于85%）', fontsize=16)
-        ax.set_xlabel('价格 (人民币)', fontsize=14)
-        ax.set_ylabel('好评率 (%)', fontsize=14)
-        ax.legend(fontsize=12)
+    ax.set_title('高性价比游戏推荐', fontsize=16, fontproperties=font_prop)
+    ax.set_xlabel('价格 (人民币)', fontsize=14, fontproperties=font_prop)
+    ax.set_ylabel('好评率 (%)', fontsize=14, fontproperties=font_prop)
+    
+    # 设置刻度标签字体
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontproperties(font_prop)
+    
+    # 添加图例
+    legend = ax.legend(loc='best', fontsize=12)
+    # 设置图例中的字体
+    for text in legend.get_texts():
+        text.set_fontproperties(font_prop)
     
     ax.grid(True, linestyle='--', alpha=0.7)
-    
     plt.tight_layout()
     
     return fig, high_value_games
