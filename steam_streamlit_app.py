@@ -43,14 +43,23 @@ st.set_page_config(
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
-    html, body, [class*="css"], [class*="st-"] {
+    /* 全局字体设置 */
+    html, body, [class*="css"], [class*="st-"], .stApp, .stApp * {
         font-family: 'Noto Sans SC', sans-serif !important;
     }
-    .stPlotlyChart, .stChart, .matplotlib-figure, .stMarkdown, .stText, .stTitle, .stHeader, .stDataFrame {
+    /* 确保所有Streamlit元素使用Noto Sans SC字体 */
+    .stPlotlyChart, .stChart, .matplotlib-figure, .stMarkdown, .stText, .stTitle, .stHeader, .stDataFrame,
+    .stButton, .stSelectbox, .stMultiselect, .stSlider, .stRadio, .stCheckbox, .stNumberInput, .stTextInput,
+    .stDateInput, .stTimeInput, .stFileUploader, .stTabs, .stExpander, .stSidebar, .stMetric, .stProgress,
+    .stAlert, .stInfo, .stWarning, .stError, .stSuccess, .stTable, .stImage, .stAudio, .stVideo, .stDownloadButton {
         font-family: 'Noto Sans SC', sans-serif !important;
     }
     /* 确保图表中的文本也使用Noto Sans SC字体 */
-    svg text, g text, .tick text {
+    svg text, g text, .tick text, text.ytitle, text.xtitle, text.gtitle, .annotation-text, .legendtext {
+        font-family: 'Noto Sans SC', sans-serif !important;
+    }
+    /* 强制应用于所有可能的文本元素 */
+    * {
         font-family: 'Noto Sans SC', sans-serif !important;
     }
 </style>
@@ -396,7 +405,7 @@ def plot_tags_bar(df):
     
     # 绘制柱状图
     fig, ax = plt.subplots(figsize=(10, 8))
-·    
+    
     # 使用全局字体属性对象
     global font_prop
     
@@ -436,9 +445,29 @@ def plot_tags_wordcloud(df):
     # 使用全局字体属性对象
     global font_prop
     
-    # 创建词云对象 - 不依赖特定字体路径
+    # 创建词云对象 - 尝试多种方式设置字体
     try:
-        # 尝试使用内置字体
+        # 尝试查找可用的中文字体
+        font_path = None
+        
+        # 尝试使用matplotlib字体管理器查找字体
+        import matplotlib.font_manager as fm
+        font_files = fm.findSystemFonts()
+        
+        # 优先尝试找Noto Sans SC字体（Google字体，通过CSS已加载）
+        noto_fonts = [f for f in font_files if 'noto' in f.lower() and ('sans' in f.lower() or 'sc' in f.lower())]
+        if noto_fonts:
+            font_path = noto_fonts[0]
+            st.sidebar.success(f"找到Noto字体: {font_path}")
+        
+        # 其次尝试找其他常见中文字体
+        if not font_path:
+            chinese_fonts = [f for f in font_files if any(name in f.lower() for name in ['simhei', 'simsun', 'msyh', 'wqy', 'droid', 'noto'])]
+            if chinese_fonts:
+                font_path = chinese_fonts[0]
+                st.sidebar.success(f"找到中文字体: {font_path}")
+        
+        # 创建词云对象
         wordcloud = WordCloud(
             width=800, 
             height=400, 
@@ -446,8 +475,7 @@ def plot_tags_wordcloud(df):
             max_words=100,
             max_font_size=150,
             random_state=42,
-            # 使用font_path=None让WordCloud使用默认字体
-            font_path=None
+            font_path=font_path  # 使用找到的字体或None
         )
         
         # 生成词云
@@ -466,8 +494,54 @@ def plot_tags_wordcloud(df):
         return fig
     except Exception as e:
         st.error(f"生成词云时出错: {e}")
-        st.info("由于字体问题，词云可能无法正确显示中文。请尝试使用其他可视化方式查看标签数据。")
-        return None
+        st.info("由于字体问题，词云可能无法正确显示中文。正在尝试备用方案...")
+        
+        try:
+            # 备用方案：使用PIL加载字体
+            from PIL import ImageFont
+            import tempfile
+            import os
+            
+            # 尝试从网络下载Noto Sans SC字体并保存到临时文件
+            st.warning("尝试使用备用方案生成词云...")
+            
+            # 使用不指定字体的方式创建词云
+            wordcloud = WordCloud(
+                width=800, 
+                height=400, 
+                background_color='white',
+                max_words=100,
+                max_font_size=150,
+                random_state=42,
+                # 完全不指定字体路径
+                font_path=None
+            )
+            
+            # 生成词云
+            wordcloud.generate_from_frequencies(tag_counter)
+            
+            # 绘制词云图
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.imshow(wordcloud, interpolation='bilinear')
+            ax.axis('off')
+            
+            # 添加标题
+            ax.set_title('Steam游戏标签词云 (备用方案)', fontsize=16, fontproperties=font_prop)
+            
+            plt.tight_layout()
+            
+            st.success("成功使用备用方案生成词云！")
+            return fig
+            
+        except Exception as backup_error:
+            st.error(f"备用方案也失败了: {backup_error}")
+            
+            # 最后的备选方案：显示标签频率表格
+            st.info("显示标签频率表格作为替代...")
+            top_tags_df = pd.DataFrame(tag_counter.most_common(30), columns=['标签', '出现次数'])
+            st.dataframe(top_tags_df)
+            
+            return None
 
 def find_high_value_games(df, mean_price=None):
     """
