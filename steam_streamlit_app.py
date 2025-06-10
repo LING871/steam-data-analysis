@@ -43,19 +43,19 @@ st.set_page_config(
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
-    html, body, [class*="css"] {
+    html, body, [class*="css"], [class*="st-"] {
         font-family: 'Noto Sans SC', sans-serif !important;
     }
-    .stPlotlyChart, .stChart, .matplotlib-figure {
+    .stPlotlyChart, .stChart, .matplotlib-figure, .stMarkdown, .stText, .stTitle, .stHeader, .stDataFrame {
         font-family: 'Noto Sans SC', sans-serif !important;
     }
-    .tick text, .axislabel, .legend text, .mpld3-xaxis, .mpld3-yaxis {
+    /* 确保图表中的文本也使用Noto Sans SC字体 */
+    svg text, g text, .tick text {
         font-family: 'Noto Sans SC', sans-serif !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 设置中文显示
 # 设置中文显示
 try:
     # 更可靠的中文字体设置方法
@@ -73,28 +73,26 @@ try:
         font_family = ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'sans-serif']
         font_path = '/System/Library/Fonts/PingFang.ttc'
     else:  # Linux等其他系统
-        # Linux系统字体设置
+        # Linux系统字体设置 - 不指定具体路径，使用字体名称
         font_family = ['Noto Sans SC', 'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'sans-serif']
-        font_path = '/usr/share/fonts/truetype/noto/NotoSansSC-Regular.otf'
+        font_path = None  # 不指定具体路径，让matplotlib自动查找
     
     # 创建通用字体属性对象，用于所有图表
     font_prop = fm.FontProperties(family=font_family)
     
-    # 尝试注册字体
-    try:
-        from matplotlib.font_manager import FontProperties, fontManager
-        fontManager.addfont(font_path)
-    except Exception as e:
-        st.warning(f"注册字体失败: {e}，将使用系统默认字体")
+    # 尝试注册字体，仅当字体路径存在时
+    if font_path and os.path.exists(font_path):
+        try:
+            from matplotlib.font_manager import FontProperties, fontManager
+            fontManager.addfont(font_path)
+            st.sidebar.success(f"成功注册字体: {font_path}")
+        except Exception as e:
+            st.sidebar.warning(f"注册字体失败: {e}，将使用系统默认字体")
     
     # 设置字体
     plt.rcParams['font.family'] = 'sans-serif'
     plt.rcParams['font.sans-serif'] = font_family
     plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
-    
-    # 获取当前使用的字体
-    from matplotlib.font_manager import findfont, FontProperties
-    current_font = findfont(FontProperties(family=font_family[0]))
     
     # 设置seaborn样式
     sns.set(style="whitegrid")
@@ -438,49 +436,38 @@ def plot_tags_wordcloud(df):
     # 使用全局字体属性对象
     global font_prop
     
-    # 获取字体路径用于词云
+    # 创建词云对象 - 不依赖特定字体路径
     try:
-        font_path = fm.findfont(fm.FontProperties(family=['Noto Sans SC', 'Microsoft YaHei', 'SimHei']))
-    except:
-        # 如果找不到中文字体，尝试使用系统默认字体
-        font_path = None
-    
-    # 创建词云对象
-    if font_path:
-        wordcloud = WordCloud(
-            font_path=font_path,
-            width=800, 
-            height=400, 
-            background_color='white',
-            max_words=100,
-            max_font_size=150,
-            random_state=42
-        )
-    else:
-        # 如果找不到字体，使用默认设置
+        # 尝试使用内置字体
         wordcloud = WordCloud(
             width=800, 
             height=400, 
             background_color='white',
             max_words=100,
             max_font_size=150,
-            random_state=42
+            random_state=42,
+            # 使用font_path=None让WordCloud使用默认字体
+            font_path=None
         )
-    
-    # 生成词云
-    wordcloud.generate_from_frequencies(tag_counter)
-    
-    # 绘制词云图
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.imshow(wordcloud, interpolation='bilinear')
-    ax.axis('off')
-    
-    # 添加标题
-    ax.set_title('Steam游戏标签词云', fontsize=16, fontproperties=font_prop)
-    
-    plt.tight_layout()
-    
-    return fig
+        
+        # 生成词云
+        wordcloud.generate_from_frequencies(tag_counter)
+        
+        # 绘制词云图
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.imshow(wordcloud, interpolation='bilinear')
+        ax.axis('off')
+        
+        # 添加标题
+        ax.set_title('Steam游戏标签词云', fontsize=16, fontproperties=font_prop)
+        
+        plt.tight_layout()
+        
+        return fig
+    except Exception as e:
+        st.error(f"生成词云时出错: {e}")
+        st.info("由于字体问题，词云可能无法正确显示中文。请尝试使用其他可视化方式查看标签数据。")
+        return None
 
 def find_high_value_games(df, mean_price=None):
     """
@@ -801,3 +788,934 @@ def main():
 # 运行应用
 if __name__ == "__main__":
     main()
+    
+# 设置全局字体属性对象
+import platform
+
+font_prop = None
+try:
+    # 尝试查找中文字体，优先级：Noto Sans SC > Microsoft YaHei > SimHei
+    font_paths = []
+    for font_name in ['Noto Sans SC', 'Microsoft YaHei', 'SimHei', 'SimSun', 'WenQuanYi Micro Hei', 'Droid Sans Fallback']:
+        try:
+            font_path = fm.findfont(fm.FontProperties(family=font_name))
+            if font_path and os.path.exists(font_path):
+                font_paths.append((font_name, font_path))
+                st.sidebar.success(f"成功加载中文字体: {font_name}")
+                break
+        except Exception as e:
+            st.sidebar.warning(f"尝试加载字体 {font_name} 失败: {str(e)}")
+            continue
+    
+    if font_paths:
+        font_name, font_path = font_paths[0]  # 使用找到的第一个字体
+        font_prop = fm.FontProperties(fname=font_path)
+    else:
+        # 如果找不到中文字体，使用默认字体
+        font_prop = fm.FontProperties()
+        st.sidebar.warning("未找到中文字体，使用默认字体")
+        
+    # 添加调试信息
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st.sidebar.info(f"字体路径: {font_path}")
+    else:
+        st.sidebar.info("未找到中文字体路径")
+    
+except Exception as e:
+    st.sidebar.error(f"设置字体时出错: {e}")
+    font_prop = fm.FontProperties()
+    
+    st.sidebar.info(f"当前系统: {platform.system()}")
+    if font_paths:
+        st
