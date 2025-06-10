@@ -70,41 +70,71 @@ try:
     # 更可靠的中文字体设置方法
     import platform
     import matplotlib.font_manager as fm
+    import requests
+    import tempfile
+    
+    # 创建字体目录（如果不存在）
+    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
+    os.makedirs(fonts_dir, exist_ok=True)
+    
+    # 下载并使用Google Noto Sans SC字体
+    font_url = "https://fonts.gstatic.com/s/notosanssc/v26/k3kXo84MPvpLmixcA63oeALhLOCT-xWNm8Hqd37g1OkDRZe7lR4sg1IzSy-MNbE9VH8V.ttf"
+    font_path = os.path.join(fonts_dir, 'NotoSansSC-Regular.ttf')
+    
+    # 如果字体文件不存在，则下载
+    if not os.path.exists(font_path):
+        try:
+            st.sidebar.info("正在下载中文字体文件...")
+            # 创建临时文件
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.ttf') as temp_file:
+                temp_path = temp_file.name
+                # 下载字体
+                response = requests.get(font_url)
+                if response.status_code == 200:
+                    temp_file.write(response.content)
+                    # 下载完成后移动到目标位置
+                    os.replace(temp_path, font_path)
+                    st.sidebar.success("字体下载成功！")
+                else:
+                    st.sidebar.error(f"字体下载失败: HTTP {response.status_code}")
+        except Exception as e:
+            st.sidebar.error(f"字体下载出错: {e}")
     
     system = platform.system()
     
-    if system == 'Windows':
-        # Windows系统字体设置
-        font_family = ['Microsoft YaHei', 'SimHei', 'SimSun', 'Arial Unicode MS', 'sans-serif']
-        font_path = 'C:/Windows/Fonts/msyh.ttc'  # 微软雅黑字体路径
-    elif system == 'Darwin':  # macOS
-        # macOS系统字体设置
-        font_family = ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'sans-serif']
-        font_path = '/System/Library/Fonts/PingFang.ttc'
-    else:  # Linux等其他系统
-        # Linux系统字体设置 - 不指定具体路径，使用字体名称
-        font_family = ['Noto Sans SC', 'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'sans-serif']
-        font_path = None  # 不指定具体路径，让matplotlib自动查找
+    # 设置字体家族
+    font_family = ['Noto Sans SC', 'Microsoft YaHei', 'SimHei', 'Arial Unicode MS', 'sans-serif']
     
-    # 创建通用字体属性对象，用于所有图表
-    font_prop = fm.FontProperties(family=font_family)
-    
-    # 尝试注册字体，仅当字体路径存在时
-    if font_path and os.path.exists(font_path):
+    # 创建通用字体属性对象，优先使用下载的Noto Sans SC字体
+    if os.path.exists(font_path):
+        font_prop = fm.FontProperties(fname=font_path)
+        st.sidebar.success(f"使用字体: {font_path}")
+        
+        # 注册字体
         try:
             from matplotlib.font_manager import FontProperties, fontManager
             fontManager.addfont(font_path)
-            st.sidebar.success(f"成功注册字体: {font_path}")
         except Exception as e:
-            st.sidebar.warning(f"注册字体失败: {e}，将使用系统默认字体")
+            st.sidebar.warning(f"注册字体失败: {e}")
+    else:
+        # 如果下载的字体不可用，尝试使用系统字体
+        font_prop = fm.FontProperties(family=font_family)
+        st.sidebar.info("使用系统字体")
     
-    # 设置字体
+    # 设置matplotlib字体
     plt.rcParams['font.family'] = 'sans-serif'
     plt.rcParams['font.sans-serif'] = font_family
     plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
     
     # 设置seaborn样式
     sns.set(style="whitegrid")
+    
+    # 显示系统信息，用于调试
+    with st.sidebar.expander("系统信息", expanded=False):
+        st.write(f"操作系统: {system}")
+        st.write(f"Python版本: {platform.python_version()}")
+        st.write(f"字体目录: {fonts_dir}")
+        st.write(f"字体文件存在: {os.path.exists(font_path)}")
     
 except Exception as e:
     st.warning(f"警告：设置中文字体时出错 - {e}")
@@ -300,23 +330,24 @@ def plot_price_distribution(df):
     # 绘制价格分布直方图
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # 获取字体路径
-    try:
-        font_path = fm.findfont(fm.FontProperties(family='Microsoft YaHei'))
-    except:
-        font_path = None
+    # 使用全局字体属性对象
+    global font_prop
+    
+    # 确保使用正确的字体设置
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.sans-serif'] = ['Noto Sans SC', 'Microsoft YaHei', 'SimHei', 'Arial Unicode MS']
+    plt.rcParams['axes.unicode_minus'] = False
     
     sns.histplot(valid_prices, bins=30, kde=True, color='skyblue', ax=ax)
     
-    # 添加标题和标签
-    if font_path:
-        ax.set_title('Steam游戏价格分布', fontsize=16, fontproperties=fm.FontProperties(fname=font_path))
-        ax.set_xlabel('价格 (人民币)', fontsize=14, fontproperties=fm.FontProperties(fname=font_path))
-        ax.set_ylabel('游戏数量', fontsize=14, fontproperties=fm.FontProperties(fname=font_path))
-    else:
-        ax.set_title('Steam游戏价格分布', fontsize=16)
-        ax.set_xlabel('价格 (人民币)', fontsize=14)
-        ax.set_ylabel('游戏数量', fontsize=14)
+    # 添加标题和标签，使用全局字体属性
+    ax.set_title('Steam游戏价格分布', fontsize=16, fontproperties=font_prop)
+    ax.set_xlabel('价格 (人民币)', fontsize=14, fontproperties=font_prop)
+    ax.set_ylabel('游戏数量', fontsize=14, fontproperties=font_prop)
+    
+    # 设置刻度标签字体
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontproperties(font_prop)
     
     ax.grid(True, linestyle='--', alpha=0.7)
     
@@ -330,10 +361,8 @@ def plot_price_distribution(df):
     ax.axvline(median_price, color='green', linestyle='-.', 
                 label=f'中位数价格: {median_price:.2f}人民币')
     
-    if font_path:
-        ax.legend(fontsize=12, prop=fm.FontProperties(fname=font_path))
-    else:
-        ax.legend(fontsize=12)
+    # 设置图例字体
+    ax.legend(fontsize=12, prop=font_prop)
     
     plt.tight_layout()
     
@@ -356,6 +385,11 @@ def plot_rating_price_correlation(df):
     
     # 使用全局字体属性对象
     global font_prop
+    
+    # 确保使用正确的字体设置
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.sans-serif'] = ['Noto Sans SC', 'Microsoft YaHei', 'SimHei', 'Arial Unicode MS']
+    plt.rcParams['axes.unicode_minus'] = False
     
     # 使用seaborn的regplot绘制散点图和回归线
     sns.regplot(x='价格', y='好评率', data=valid_data, 
@@ -409,6 +443,11 @@ def plot_tags_bar(df):
     # 使用全局字体属性对象
     global font_prop
     
+    # 确保使用正确的字体设置
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.sans-serif'] = ['Noto Sans SC', 'Microsoft YaHei', 'SimHei', 'Arial Unicode MS']
+    plt.rcParams['axes.unicode_minus'] = False
+    
     sns.barplot(x='出现次数', y='标签', data=tags_df, palette='viridis', ax=ax)
     
     # 添加标题和标签，使用全局字体属性
@@ -442,12 +481,26 @@ def plot_tags_wordcloud(df):
     # 统计标签频率
     tag_counter = Counter(all_tags)
     
-    # 使用全局字体属性对象
+    # 使用全局字体属性对象和字体路径
     global font_prop
     
-    # 创建词云对象 - 不依赖特定字体路径
+    # 获取下载的字体路径
+    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
+    noto_font_path = os.path.join(fonts_dir, 'NotoSansSC-Regular.ttf')
+    
+    # 创建词云对象 - 优先使用下载的Noto Sans SC字体
     try:
-        # 尝试使用内置字体
+        # 确定要使用的字体路径
+        if os.path.exists(noto_font_path):
+            # 使用下载的Noto Sans SC字体
+            font_path_for_wordcloud = noto_font_path
+            st.info("词云使用下载的Noto Sans SC字体")
+        else:
+            # 尝试使用系统字体
+            font_path_for_wordcloud = None
+            st.info("词云使用系统默认字体")
+        
+        # 创建词云对象
         wordcloud = WordCloud(
             width=800, 
             height=400, 
@@ -455,8 +508,7 @@ def plot_tags_wordcloud(df):
             max_words=100,
             max_font_size=150,
             random_state=42,
-            # 使用font_path=None让WordCloud使用默认字体
-            font_path=None
+            font_path=font_path_for_wordcloud
         )
         
         # 生成词云
@@ -476,6 +528,8 @@ def plot_tags_wordcloud(df):
     except Exception as e:
         st.error(f"生成词云时出错: {e}")
         st.info("由于字体问题，词云可能无法正确显示中文。请尝试使用其他可视化方式查看标签数据。")
+        # 显示更详细的错误信息，帮助调试
+        st.expander("详细错误信息", expanded=False).exception(e)
         return None
 
 def find_high_value_games(df, mean_price=None):
