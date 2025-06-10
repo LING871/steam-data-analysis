@@ -47,14 +47,14 @@ def setup_chinese_font():
             fm.fontManager.addfont(font_path)
             
             st.success(f"✅ 成功设置中文字体: {font_name}")
-            return True
+            return font_prop, font_path  # 修改这里
         else:
             st.warning("⚠️ 未找到系统中文字体，中文可能显示为方框")
-            return False
+            return None, None  # 修改这里
             
     except Exception as e:
         st.error(f"❌ 字体设置失败: {e}")
-        return False
+        return None, None  # 修改这里
 
 def get_wordcloud_font():
     """
