@@ -21,6 +21,7 @@ import os
 import io
 import base64
 from PIL import Image
+import platform 
 
 # 检查必要的库是否已安装
 try:
@@ -67,102 +68,49 @@ st.markdown("""
 
 # 设置中文显示
 try:
-    # 更可靠的中文字体设置方法
-    import platform
-    import matplotlib.font_manager as fm
-    import requests
-    import tempfile
+    # 导入字体配置模块
+    from font_config import setup_chinese_font, get_wordcloud_font, apply_font_to_figure
     
-    # 创建字体目录（如果不存在）
-    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
-    os.makedirs(fonts_dir, exist_ok=True)
+    # 设置中文字体
+    font_prop, font_path = setup_chinese_font()
     
-    # 下载并使用Google Noto Sans SC字体
-    font_urls = [
-        "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
-        "https://fonts.gstatic.com/s/notosanssc/v26/k3kXo84MPvpLmixcA63oeALhLOCT-xWNm8Hqd37g1OkDRZe7lR4sg1IzSy-MNbE9VH8V.ttf",
-        "https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansSC/NotoSansSC-Regular.ttf"
-    ]
-    font_path = os.path.join(fonts_dir, 'NotoSansSC-Regular.ttf')
-    
-    # 如果字体文件不存在，则下载
-    if not os.path.exists(font_path):
-        download_success = False
-        for i, font_url in enumerate(font_urls):
-            try:
-                st.sidebar.info(f"正在尝试下载中文字体文件... (尝试 {i+1}/{len(font_urls)})")
-                # 设置请求头，模拟浏览器
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-                # 下载字体
-                response = requests.get(font_url, headers=headers, timeout=30)
-                if response.status_code == 200 and len(response.content) > 1000:  # 确保下载的文件不为空
-                    with open(font_path, 'wb') as f:
-                        f.write(response.content)
-                    st.sidebar.success(f"字体下载成功！文件大小: {len(response.content)} 字节")
-                    download_success = True
-                    break
-                else:
-                    st.sidebar.warning(f"字体下载失败: HTTP {response.status_code}，尝试下一个源...")
-            except Exception as e:
-                st.sidebar.warning(f"字体下载出错: {e}，尝试下一个源...")
-        
-        if not download_success:
-            st.sidebar.error("所有字体下载源都失败，将使用系统默认字体")
-    
-    system = platform.system()
-    
-    # 设置字体家族
-    font_family = ['Noto Sans SC', 'Microsoft YaHei', 'SimHei', 'Arial Unicode MS', 'sans-serif']
-    
-    # 创建通用字体属性对象，优先使用下载的Noto Sans SC字体
-    if os.path.exists(font_path):
-        font_prop = fm.FontProperties(fname=font_path)
-        st.sidebar.success(f"使用字体: {font_path}")
-        
-        # 注册字体
-        try:
-            from matplotlib.font_manager import FontProperties, fontManager
-            fontManager.addfont(font_path)
-        except Exception as e:
-            st.sidebar.warning(f"注册字体失败: {e}")
+    if font_prop and font_path:
+        st.sidebar.success(f"✅ 中文字体设置成功: {os.path.basename(font_path)}")
     else:
-        # 如果下载的字体不可用，尝试使用系统字体
-        font_prop = fm.FontProperties(family=font_family)
-        st.sidebar.info("使用系统字体")
-    
-    # 设置matplotlib字体
-    plt.rcParams['font.family'] = 'sans-serif'
-    plt.rcParams['font.sans-serif'] = font_family
-    plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+        st.sidebar.warning("⚠️ 使用默认字体，中文显示可能有问题")
     
     # 设置seaborn样式
     sns.set(style="whitegrid")
     
-    # 显示系统信息，用于调试
-    with st.sidebar.expander("系统信息", expanded=False):
-        st.write(f"操作系统: {system}")
+    # 显示字体信息
+    with st.sidebar.expander("字体信息", expanded=False):
+        import platform
+        st.write(f"操作系统: {platform.system()}")
         st.write(f"Python版本: {platform.python_version()}")
-        st.write(f"字体目录: {fonts_dir}")
-        st.write(f"字体文件存在: {os.path.exists(font_path)}")
+        if font_path:
+            st.write(f"字体文件: {font_path}")
+            st.write(f"字体存在: {os.path.exists(font_path) if font_path else False}")
+        
+        # 显示可用字体列表
+        import matplotlib.font_manager as fm
+        available_fonts = [f.name for f in fm.fontManager.ttflist if any(keyword in f.name.lower() for keyword in ['microsoft', 'sim', 'noto', 'dejavu'])]
+        if available_fonts:
+            st.write("可用中文字体:")
+            for font in available_fonts[:5]:  # 只显示前5个
+                st.write(f"- {font}")
     
 except Exception as e:
-    st.warning(f"警告：设置中文字体时出错 - {e}")
-    st.info("将尝试使用系统默认字体")
+    st.error(f"❌ 字体配置失败: {e}")
+    st.info("将使用系统默认字体")
     # 创建一个默认字体属性对象
+    import matplotlib.font_manager as fm
     font_prop = fm.FontProperties()
-
-# 强制设置matplotlib使用中文字体
-try:
-    plt.rcParams['font.family'] = ['sans-serif']
-    plt.rcParams['font.sans-serif'] = ['Noto Sans SC', 'Arial Unicode MS', 'SimHei', 'Microsoft YaHei']
-    plt.rcParams['axes.unicode_minus'] = False
+    font_path = None
     
     # 打印当前字体设置，用于调试
     st.sidebar.markdown("### 调试信息")
     with st.sidebar.expander("字体设置", expanded=False):
-        st.write(f"当前系统: {system}")
+        st.write(f"当前系统: {platform.system()}")
         st.write(f"字体家族: {plt.rcParams['font.family']}")
         st.write(f"无衬线字体: {plt.rcParams['font.sans-serif']}")
         if 'font_prop' in locals():
@@ -375,6 +323,9 @@ def plot_price_distribution(df):
     # 设置图例字体
     ax.legend(fontsize=12, prop=font_prop)
     
+    # 应用字体配置到整个图形
+    apply_font_to_figure(fig)
+    
     plt.tight_layout()
     
     return fig, mean_price
@@ -426,6 +377,9 @@ def plot_rating_price_correlation(df):
     for label in ax.get_xticklabels() + ax.get_yticklabels():
         label.set_fontproperties(font_prop)
     
+    # 应用字体配置到整个图形
+    apply_font_to_figure(fig)
+    
     plt.tight_layout()
     
     return fig, corr
@@ -474,6 +428,9 @@ def plot_tags_bar(df):
     for i, v in enumerate(tags_df['出现次数']):
         ax.text(v + 0.5, i, str(v), fontproperties=font_prop)
     
+    # 应用字体配置到整个图形
+    apply_font_to_figure(fig)
+    
     plt.tight_layout()
     
     return fig
@@ -499,39 +456,15 @@ def plot_tags_wordcloud(df):
     fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
     noto_font_path = os.path.join(fonts_dir, 'NotoSansSC-Regular.ttf')
     
-    # 创建词云对象 - 优先使用下载的Noto Sans SC字体
+    # 创建词云对象 - 使用字体配置模块
     try:
-        # 确定要使用的字体路径
-        font_path_for_wordcloud = None
+        # 获取词云专用字体路径
+        font_path_for_wordcloud = get_wordcloud_font()
         
-        if os.path.exists(noto_font_path):
-            # 验证字体文件是否可用
-            try:
-                # 测试字体文件是否可以被WordCloud使用
-                test_wordcloud = WordCloud(font_path=noto_font_path, width=100, height=100)
-                font_path_for_wordcloud = noto_font_path
-                st.success(f"词云使用下载的Noto Sans SC字体: {noto_font_path}")
-            except Exception as font_error:
-                st.error(f"下载的字体文件无法使用: {font_error}")
-                font_path_for_wordcloud = None
+        if font_path_for_wordcloud:
+            st.success(f"✅ 词云字体: {os.path.basename(font_path_for_wordcloud)}")
         else:
-            st.warning(f"字体文件不存在: {noto_font_path}")
-        
-        # 如果下载的字体不可用，尝试查找系统中文字体
-        if font_path_for_wordcloud is None:
-            import matplotlib.font_manager as fm
-            # 查找系统中的中文字体
-            chinese_fonts = []
-            for font in fm.fontManager.ttflist:
-                font_name = font.name.lower()
-                if any(name in font_name for name in ['microsoft yahei', 'simhei', 'simsun', 'noto', 'source han']):
-                    chinese_fonts.append(font.fname)
-            
-            if chinese_fonts:
-                font_path_for_wordcloud = chinese_fonts[0]
-                st.info(f"词云使用系统字体: {font_path_for_wordcloud}")
-            else:
-                st.warning("未找到可用的中文字体，词云可能无法正确显示中文")
+            st.warning("⚠️ 词云使用默认字体，中文可能显示为方框")
         
         # 创建词云对象
         wordcloud = WordCloud(
@@ -543,7 +476,8 @@ def plot_tags_wordcloud(df):
             random_state=42,
             font_path=font_path_for_wordcloud,
             prefer_horizontal=0.9,
-            min_font_size=10
+            min_font_size=10,
+            collocations=False  # 避免重复词组
         )
         
         # 生成词云
@@ -556,6 +490,9 @@ def plot_tags_wordcloud(df):
         
         # 添加标题
         ax.set_title('Steam游戏标签词云', fontsize=16, fontproperties=font_prop)
+        
+        # 应用字体配置到整个图形
+        apply_font_to_figure(fig)
         
         plt.tight_layout()
         
