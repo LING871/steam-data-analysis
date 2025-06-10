@@ -445,34 +445,9 @@ def plot_tags_wordcloud(df):
     # 使用全局字体属性对象
     global font_prop
     
-    # 创建词云对象 - 使用Noto Sans SC字体
+    # 创建词云对象 - 不依赖特定字体路径
     try:
-        # 尝试使用Noto Sans SC字体（通过CSS已加载）
-        # 创建一个临时字体文件路径
-        import tempfile
-        import requests
-        import os
-        
-        # 尝试下载Google Fonts的Noto Sans SC字体
-        font_url = "https://fonts.gstatic.com/s/notosanssc/v26/k3kXo84MPvpLmixcA63oeALhLOCT-xWNm8Hqd37g1OkDRZe7lR4sg1IzSy-MNbE9VH8V.ttf"
-        font_path = None
-        
-        try:
-            # 创建临时文件保存字体
-            temp_font = tempfile.NamedTemporaryFile(delete=False, suffix='.ttf')
-            temp_font.close()
-            
-            # 下载字体文件
-            font_response = requests.get(font_url, timeout=5)
-            if font_response.status_code == 200:
-                with open(temp_font.name, 'wb') as f:
-                    f.write(font_response.content)
-                font_path = temp_font.name
-                st.sidebar.success(f"成功下载Noto Sans SC字体用于词云生成")
-        except Exception as e:
-            st.sidebar.warning(f"下载字体失败: {e}，将使用默认字体")
-        
-        # 创建词云对象
+        # 尝试使用内置字体
         wordcloud = WordCloud(
             width=800, 
             height=400, 
@@ -480,7 +455,8 @@ def plot_tags_wordcloud(df):
             max_words=100,
             max_font_size=150,
             random_state=42,
-            font_path=font_path  # 使用下载的Noto Sans SC字体或None（如果下载失败）
+            # 使用font_path=None让WordCloud使用默认字体
+            font_path=None
         )
         
         # 生成词云
